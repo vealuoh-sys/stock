@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Mardan Medical Complex Pathology Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+*{box-sizing:border-box;font-family:Segoe UI,Arial}
+body{margin:0;background:#eef4f9;color:#243447}
+.sidebar{position:fixed;width:250px;height:100vh;background:#083b66;color:white;padding:25px}
+.sidebar h2{font-size:22px}
+.sidebar div{padding:14px 0;border-bottom:1px solid #ffffff33}
+.main{margin-left:250px;padding:25px}
+.header{background:white;padding:20px;border-radius:14px;display:flex;justify-content:space-between}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:18px;margin:20px 0}
+.card{background:white;padding:20px;border-radius:15px;box-shadow:0 5px 15px #0001}
+.card h3{margin:0;color:#0b63a5;font-size:30px}
+.toolbar{background:white;padding:15px;border-radius:12px}
+input,select,button{padding:10px;border-radius:8px;border:1px solid #ccc}
+button{background:#0969b4;color:white;border:0;cursor:pointer}
+.delete{background:#d9534f}.edit{background:#198754}
+table{width:100%;margin-top:20px;border-collapse:collapse;background:white;border-radius:12px;overflow:hidden}
+th{background:#0b63a5;color:white}
+td,th{padding:12px;border-bottom:1px solid #ddd}
+.badge{padding:5px 10px;border-radius:20px;background:#d9f7df;color:#08752b}
+.modal{display:none;position:fixed;inset:0;background:#0008;align-items:center;justify-content:center}
+.box{background:white;padding:25px;border-radius:15px;width:350px}
+.box input{width:100%;margin:6px 0}
+@media(max-width:800px){.sidebar{position:relative;width:100%;height:auto}.main{margin:0}}
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+<h2>🏥 MMC Pathology</h2>
+<div>Dashboard</div>
+<div>Inventory</div>
+<div>Low Stock Alerts</div>
+<div>Reports</div>
+<div>Settings</div>
+</div>
+
+<div class="main">
+<div class="header">
+<h2>Pathology Inventory Management</h2>
+<span id="date"></span>
+</div>
+
+<div class="cards">
+<div class="card"><h3 id="total">0</h3>Total Items</div>
+<div class="card"><h3 id="cal">0</h3>Calibrators</div>
+<div class="card"><h3 id="sup">0</h3>Supplies</div>
+<div class="card"><h3 id="low">0</h3>Low Stock</div>
+</div>
+
+<div class="toolbar">
+<input id="search" placeholder="Search inventory" onkeyup="render()">
+<select id="filter" onchange="render()">
+<option value="">All Categories</option>
+<option>Calibrator</option>
+<option>Supplies</option>
+</select>
+<button onclick="addNew()">+ Add Stock</button>
+</div>
+
+<table>
+<thead>
+<tr><th>S.No</th><th>Item</th><th>Category</th><th>Quantity</th><th>Usage</th><th>Available</th><th>Required</th><th>Status</th><th>Action</th></tr>
+</thead>
+<tbody id="body"></tbody>
+</table>
+</div>
+
+<div class="modal" id="modal">
+<div class="box">
+<h3>Add/Edit Inventory</h3>
+<input id="item" placeholder="Item Name">
+<input id="category" placeholder="Category">
+<input id="qty" placeholder="Quantity">
+<input id="usage" placeholder="Usage">
+<input id="stock" placeholder="Available Stock">
+<input id="required" placeholder="Required Stock">
+<button onclick="save()">Save</button>
+<button class="delete" onclick="closeM()">Cancel</button>
+</div>
+</div>
+
+<script>
+let data=JSON.parse(localStorage.getItem("mmc_inventory"))||[{"item": "Concc2", "category": "Calibrator", "qty": "12", "usage": "90 days", "stock": "7 vials", "required": "N/A"}, {"item": "MCC", "category": "Calibrator", "qty": "03 Sets", "usage": "15 days", "stock": "01 set", "required": "01 Pack"}, {"item": "Lipase", "category": "Calibrator", "qty": "60", "usage": "60 days", "stock": "02 vials", "required": "N/A"}, {"item": "BILIRUBIN", "category": "Calibrator", "qty": "30", "usage": "30 days", "stock": "02 vials", "required": "N/A"}, {"item": "ASO", "category": "Calibrator", "qty": "50", "usage": "50 days", "stock": "04 vials", "required": "N/A"}, {"item": "Detergent A", "category": "Supplies", "qty": "02", "usage": "2 days", "stock": "08 bottles", "required": "22 Packs"}, {"item": "Trigger Solution", "category": "Supplies", "qty": "04", "usage": "2 days", "stock": "17 bottles", "required": "12 Packs"}, {"item": "Reaction Vessels", "category": "Supplies", "qty": "500", "usage": "1 day", "stock": "40 Pack", "required": "02 Packs"}];
+let edit=-1;
+date.innerHTML=new Date().toDateString();
+
+function render(){
+let q=search.value.toLowerCase();
+let f=filter.value;
+body.innerHTML="";
+data.filter(x=>(JSON.stringify(x).toLowerCase().includes(q))&&(!f||x.category==f))
+.forEach((x,i)=>{
+body.innerHTML+=`<tr>
+<td>${i+1}</td><td>${x.item}</td><td>${x.category}</td><td>${x.qty}</td>
+<td>${x.usage}</td><td>${x.stock}</td><td>${x.required}</td>
+<td><span class="badge">Available</span></td>
+<td><button class="edit" onclick="editRow(${i})">Edit</button>
+<button class="delete" onclick="del(${i})">Delete</button></td></tr>`;
+});
+total.innerHTML=data.length;
+cal.innerHTML=data.filter(x=>x.category=="Calibrator").length;
+sup.innerHTML=data.filter(x=>x.category=="Supplies").length;
+low.innerHTML=data.filter(x=>x.required!="N/A").length;
+}
+function addNew(){edit=-1;modal.style.display="flex";clear();}
+function editRow(i){edit=i;let x=data[i];item.value=x.item;category.value=x.category;qty.value=x.qty;usage.value=x.usage;stock.value=x.stock;required.value=x.required;modal.style.display="flex";}
+function save(){let x={item:item.value,category:category.value,qty:qty.value,usage:usage.value,stock:stock.value,required:required.value};edit<0?data.push(x):data[edit]=x;localStorage.setItem("mmc_inventory",JSON.stringify(data));closeM();render();}
+function del(i){if(confirm("Delete item?")){data.splice(i,1);localStorage.setItem("mmc_inventory",JSON.stringify(data));render();}}
+function closeM(){modal.style.display="none";}
+function clear(){document.querySelectorAll(".box input").forEach(x=>x.value="");}
+render();
+</script>
+</body>
+</html>
