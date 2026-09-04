@@ -1,177 +1,125 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+<meta charset="UTF-8">
 <title>MMC Pathology Inventory Dashboard</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
+<script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
 <style>
-body{margin:0;font-family:Arial;background:#eef5fb;color:#223}
-.sidebar{width:240px;height:100vh;background:#084a78;color:#fff;position:fixed;padding:20px}
-.main{margin-left:260px;padding:25px}
-.card{background:#fff;padding:20px;border-radius:14px;margin-bottom:20px;box-shadow:0 3px 12px #0002}
-button{background:#0878c9;color:white;border:0;padding:10px 15px;border-radius:8px;cursor:pointer}
-input{padding:10px}
-table{width:100%;background:white;border-collapse:collapse}
-th{background:#0878c9;color:white}td,th{padding:10px;border:1px solid #ddd}
-.badge{background:#d8f5dc;color:#08752b;padding:5px 10px;border-radius:20px}
+body{margin:0;font-family:Arial;background:#eef5fb;color:#233}
+.sidebar{width:240px;height:100vh;position:fixed;background:#06466f;color:white;padding:20px}
+.main{margin-left:270px;padding:25px}
+.card{background:white;border-radius:14px;padding:20px;margin-bottom:20px;box-shadow:0 4px 15px #0002}
+button{background:#0969b4;color:white;border:0;padding:10px 15px;border-radius:8px;cursor:pointer}
+table{width:100%;border-collapse:collapse;background:white}
+th{background:#0969b4;color:white}
+td,th{padding:10px;border:1px solid #ddd}
+input{padding:10px;margin:5px}
+.preview{max-height:250px;overflow:auto}
 </style>
 </head>
-
 <body>
-
 <div class="sidebar">
 <h2>🏥 MMC Pathology</h2>
-<p>Dashboard</p>
-<p>Inventory</p>
-<p>Import Stock</p>
-<p>Reports</p>
+<p>Dashboard</p><p>Inventory</p><p>Import Stock</p><p>Reports</p>
 </div>
 
 <div class="main">
-
 <div class="card">
 <h1>Pathology Inventory Dashboard</h1>
-<p>Upload your latest MS Word or PDF stock sheet. System will extract inventory automatically.</p>
+<p>Upload Word stock sheet. System reads the table columns automatically.</p>
+<input type="file" id="upload" accept=".docx">
+<button onclick="scanDoc()">Scan Document</button>
+<p id="msg"></p>
+</div>
 
-<input type="file" id="file" accept=".docx,.pdf">
-<button onclick="importFile()">Upload & Scan Stock</button>
-
-<p id="status"></p>
+<div class="card" id="previewBox" style="display:none">
+<h2>Import Preview</h2>
+<div class="preview">
+<table>
+<thead><tr><th>S.No</th><th>Item</th><th>Quantity</th><th>Usage</th><th>Available</th><th>Required</th></tr></thead>
+<tbody id="preview"></tbody>
+</table>
+</div>
+<button onclick="confirmImport()">Confirm Import</button>
 </div>
 
 <div class="card">
 <h2>Inventory</h2>
-<input placeholder="Search..." onkeyup="searchData(this.value)" id="search">
-
+<input placeholder="Search" onkeyup="search(this.value)">
 <table>
-<thead>
-<tr>
-<th>S.No</th>
-<th>Item</th>
-<th>Category</th>
-<th>Quantity</th>
-<th>Usage</th>
-<th>Stock</th>
-</tr>
-</thead>
+<thead><tr><th>S.No</th><th>Item</th><th>Category</th><th>Qty</th><th>Usage</th><th>Stock</th><th>Required</th></tr></thead>
 <tbody id="table"></tbody>
 </table>
 </div>
-
 </div>
 
 <script>
-
 let inventory=[];
+let imported=[];
 
-function render(){
+function draw(list=inventory){
 let t=document.getElementById("table");
 t.innerHTML="";
-inventory.forEach((x,i)=>{
-t.innerHTML+=`
-<tr>
-<td>${i+1}</td>
-<td>${x.item}</td>
-<td>${x.category}</td>
-<td>${x.qty}</td>
-<td>${x.usage}</td>
-<td><span class="badge">${x.stock}</span></td>
+list.forEach((r,i)=>{
+t.innerHTML+=`<tr>
+<td>${i+1}</td><td>${r.item}</td><td>${r.category}</td>
+<td>${r.qty}</td><td>${r.usage}</td><td>${r.stock}</td><td>${r.required}</td>
 </tr>`;
 });
 }
 
-function parseText(text){
+async function scanDoc(){
+let file=document.getElementById("upload").files[0];
+if(!file)return alert("Select Word file");
 
-let lines=text.split("\n").map(x=>x.trim()).filter(Boolean);
+msg.innerHTML="Reading table...";
 
-inventory=[];
+let result=await mammoth.convertToHtml({arrayBuffer:await file.arrayBuffer()});
+let div=document.createElement("div");
+div.innerHTML=result.value;
 
-for(let i=0;i<lines.length;i++){
+let rows=[...div.querySelectorAll("table tr")];
 
-let line=lines[i];
+imported=[];
 
-if(/\d+/.test(line) && line.length>5){
+rows.forEach((row,i)=>{
+let cells=[...row.children].map(x=>x.innerText.trim());
 
-let parts=line.split(/\s+/);
-
-inventory.push({
-item:parts.slice(1,3).join(" "),
+if(i>0 && cells.length>=5){
+imported.push({
+item:cells[1]||"",
 category:"Imported",
-qty:parts[3]||"",
-usage:parts[4]||"",
-stock:parts.slice(5).join(" ")||""
-});
-
-}
-
-}
-
-render();
-
-}
-
-
-async function importFile(){
-
-let file=document.getElementById("file").files[0];
-
-if(!file){
-alert("Please select Word or PDF file");
-return;
-}
-
-document.getElementById("status").innerHTML="Scanning document...";
-
-if(file.name.endsWith(".docx")){
-
-let array=await file.arrayBuffer();
-
-mammoth.extractRawText({arrayBuffer:array})
-.then(result=>{
-parseText(result.value);
-document.getElementById("status").innerHTML="Word file imported successfully";
-});
-
-}
-
-else if(file.name.endsWith(".pdf")){
-
-let pdfjs=window["pdfjsLib"];
-
-let reader=new FileReader();
-
-reader.onload=async function(){
-
-let pdf=await pdfjs.getDocument(new Uint8Array(this.result)).promise;
-
-let text="";
-
-for(let i=1;i<=pdf.numPages;i++){
-let page=await pdf.getPage(i);
-let content=await page.getTextContent();
-text+=content.items.map(x=>x.str).join(" ")+"\n";
-}
-
-parseText(text);
-document.getElementById("status").innerHTML="PDF imported successfully";
-
-};
-
-reader.readAsArrayBuffer(file);
-
-}
-
-}
-
-
-function searchData(v){
-document.querySelectorAll("#table tr").forEach(row=>{
-row.style.display=row.innerText.toLowerCase().includes(v.toLowerCase())?"":"none";
+qty:cells[2]||"",
+usage:cells[3]||"",
+stock:cells[4]||"",
+required:cells[5]||""
 });
 }
+});
 
+preview.innerHTML="";
+imported.forEach((x,i)=>{
+preview.innerHTML+=`<tr><td>${i+1}</td><td>${x.item}</td><td>${x.qty}</td><td>${x.usage}</td><td>${x.stock}</td><td>${x.required}</td></tr>`;
+});
+
+previewBox.style.display="block";
+msg.innerHTML="Table detected. Review and confirm.";
+}
+
+function confirmImport(){
+inventory=imported;
+localStorage.setItem("mmc_inventory",JSON.stringify(inventory));
+draw();
+alert("Inventory imported successfully");
+}
+
+function search(v){
+draw(inventory.filter(x=>JSON.stringify(x).toLowerCase().includes(v.toLowerCase())));
+}
+
+inventory=JSON.parse(localStorage.getItem("mmc_inventory"))||[];
+draw();
 </script>
-
 </body>
 </html>
